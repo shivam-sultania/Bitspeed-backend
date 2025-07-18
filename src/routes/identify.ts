@@ -1,6 +1,7 @@
 import express from "express";
-import prisma from "../prisma/client";
+import { PrismaClient } from "@prisma/client";
 
+const prisma = new PrismaClient();
 const router = express.Router();
 
 router.post("/identify", async (req, res) => {
@@ -10,7 +11,7 @@ router.post("/identify", async (req, res) => {
     return res.status(400).json({ error: "Either email or phoneNumber is required." });
   }
 
-  // STEP 1: Get directly matching contacts
+  // Get directly matching contacts
   const matches = await prisma.contact.findMany({
     where: {
       OR: [
@@ -21,7 +22,7 @@ router.post("/identify", async (req, res) => {
     orderBy: { createdAt: "asc" }
   });
 
-  // STEP 2: If no matches, create a new primary contact
+  // If no matches, create a new primary contact
   if (matches.length === 0) {
     const newContact = await prisma.contact.create({
       data: {
@@ -43,7 +44,7 @@ router.post("/identify", async (req, res) => {
     });
   }
 
-  // STEP 3: Get all primary IDs involved
+  // Get all primary IDs involved
   const primaryIds = new Set<number>();
   for (const contact of matches) {
     if (contact.linkPrecedence === "primary") {
@@ -53,7 +54,7 @@ router.post("/identify", async (req, res) => {
     }
   }
 
-  // STEP 4: Fetch all related contacts once
+  // Fetch all related contacts once
   const linkedContact = await prisma.contact.findMany({
     where: {
       OR: [
@@ -64,7 +65,7 @@ router.post("/identify", async (req, res) => {
     orderBy: { createdAt: "asc" }
   });
 
-  // STEP 5: Determine the correct new primary (oldest primary contact)
+  // Determine the correct new primary (oldest primary contact)
   const primaries = linkedContact.filter(c => c.linkPrecedence === "primary");
   const newPrimary = primaries.reduce((oldest, current) => {
     return new Date(current.createdAt) < new Date(oldest.createdAt) ? current : oldest;
@@ -109,7 +110,7 @@ router.post("/identify", async (req, res) => {
     }
   }
 
-  // STEP 6: If current email+phone combo doesn't exist, add it
+  // If current email+phone combo doesn't exist, add it
   let newContact = null;
   const existingCombo = linkedContact.find(
     c => c.email === email && c.phoneNumber === phoneNumber
@@ -128,10 +129,10 @@ router.post("/identify", async (req, res) => {
     newContact = created;
   }
 
-  // STEP 7: Execute pending updates
+  // Execute pending updates
   await Promise.all(queries);
 
-  // STEP 8: Final list of contacts = updated + new inserted (no need to query DB again)
+  // Final list of contacts = updated + new inserted (no need to query DB again)
   const finalContacts = [...contactsMap.values()];
   if (newContact) finalContacts.push(newContact);
 

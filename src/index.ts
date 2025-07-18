@@ -6,7 +6,7 @@ dotenv.config();
 
 const app = express();
 app.use(express.json());
-app.use("/", identifyRoute);
+app.use("/", identifyRoute); // using "/identify" route in root route
 
-const PORT = process.env.PORT || 3000;
+const PORT = 3000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
