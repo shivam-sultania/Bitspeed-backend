@@ -67,31 +67,21 @@ router.post("/identify", async (req, res) => {
 
   // Determine the correct new primary (oldest primary contact)
   const primaries = linkedContact.filter(c => c.linkPrecedence === "primary");
-  const newPrimary = primaries.reduce((oldest, current) => {
-    return new Date(current.createdAt) < new Date(oldest.createdAt) ? current : oldest;
-  });
+  let newPrimary = primaries[0]; // start with the first item
+
+  for (let i = 1; i < primaries.length; i++) {
+    if (new Date(primaries[i].createdAt) < new Date(newPrimary.createdAt)) {
+      newPrimary = primaries[i];
+    }
+  }
 
   const contactsMap = new Map<number, any>();
   const queries: any[] = [];
 
   for (const contact of linkedContact) {
     if (contact.id === newPrimary.id) {
-      if (contact.linkPrecedence !== "primary" || contact.linkedId !== null) {
-        queries.push(
-          prisma.contact.update({
-            where: { id: contact.id },
-            data: { linkPrecedence: "primary", linkedId: null }
-          })
-        );
-        contactsMap.set(contact.id, {
-          ...contact,
-          linkPrecedence: "primary",
-          linkedId: null
-        });
-      } else {
-        contactsMap.set(contact.id, contact);
-      }
-    } else {
+      contactsMap.set(contact.id, contact);
+      }else {
       if (contact.linkPrecedence !== "secondary" || contact.linkedId !== newPrimary.id) {
         queries.push(
           prisma.contact.update({
@@ -110,7 +100,7 @@ router.post("/identify", async (req, res) => {
     }
   }
 
-  // If current email+phone combo doesn't exist, add it
+  // If current email+phone combo doesn't exist
   let newContact = null;
   const existingCombo = linkedContact.find(
     c => c.email === email && c.phoneNumber === phoneNumber
@@ -132,7 +122,7 @@ router.post("/identify", async (req, res) => {
   // Execute pending updates
   await Promise.all(queries);
 
-  // Final list of contacts = updated + new inserted (no need to query DB again)
+  // Final list of contacts = updated + new inserted
   const finalContacts = [...contactsMap.values()];
   if (newContact) finalContacts.push(newContact);
 
@@ -149,9 +139,9 @@ router.post("/identify", async (req, res) => {
   return res.status(200).json({
     contact: {
       primaryContactId: newPrimary.id,
-      emails: [newPrimary.email, ...Array.from(emails).filter(e => e !== newPrimary.email)],
-      phoneNumbers: [newPrimary.phoneNumber, ...Array.from(phoneNumbers).filter(p => p !== newPrimary.phoneNumber)],
-      secondaryContactIds: secondaryContactIds
+      emails: [newPrimary.email, ...Array.from(emails).filter(e => e && e !== newPrimary.email)].filter(Boolean),
+      phoneNumbers: [newPrimary.phoneNumber, ...Array.from(phoneNumbers).filter(p => p && p !== newPrimary.phoneNumber)].filter(Boolean),
+      secondaryContactIds
     }
   });
 });
